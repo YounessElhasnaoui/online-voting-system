@@ -146,3 +146,4 @@ npm-debug.log*
 
 # Build
 frontend/build/
+.codegpt

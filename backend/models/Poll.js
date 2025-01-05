@@ -12,10 +12,6 @@ const PollSchema = new mongoose.Schema(
           type: String,
           required: true,
         },
-        votes: {
-          type: Number,
-          default: 0,
-        },
       },
     ],
     allowedSelections: {
@@ -30,31 +26,24 @@ const PollSchema = new mongoose.Schema(
     },
     creator: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User', // Assuming you have a 'User' model for user authentication
+      ref: 'User',
       required: true,
     },
     endTime: {
       type: Date,
       required: true,
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
   },
-  {
-    timestamps: true, // Automatically adds `createdAt` and `updatedAt`
-  }
+  { timestamps: true }
 );
 
-// This is optional, but if you want to add additional methods or virtuals, you can add them here
-PollSchema.methods.updateTimestamp = function () {
-  this.updatedAt = Date.now();
-  return this.save();
-};
+PollSchema.pre('deleteOne', { document: true, query: false }, async function (next) {
+  try {
+    await mongoose.model('Vote').deleteMany({ poll: this._id });
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 module.exports = mongoose.model('Poll', PollSchema);

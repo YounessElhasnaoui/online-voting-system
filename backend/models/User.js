@@ -33,20 +33,6 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    // Array of poll IDs created by the user
-    pollsCreated: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Poll',
-      },
-    ],
-    // Array of poll IDs the user voted in
-    pollsVoted: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Poll',
-      },
-    ],
   },
   {
     timestamps: true,
@@ -64,5 +50,19 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
+
+userSchema.pre('remove', async function (next) {
+  try {
+    // Delete all polls created by the user
+    await Poll.deleteMany({ creator: this._id });
+
+    // Delete all votes cast by the user
+    await Vote.deleteMany({ user: this._id });
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 module.exports = mongoose.model('User', userSchema);

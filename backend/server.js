@@ -4,8 +4,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const connectDB = require('./config/db');
 const userRoutes = require('./routes/userRoutes');
-const User = require('./models/User');
 const pollRoutes = require('./routes/pollRoutes');
+const voteRoutes = require('./routes/voteRoutes');
 
 dotenv.config();
 connectDB();
@@ -21,6 +21,9 @@ app.use(helmet());
 app.use('/api/users', userRoutes);
 // Add Poll Routes
 app.use('/api/polls', pollRoutes);
+
+app.use('/api/votes', voteRoutes);
+
 
 // Server setup
 const PORT = process.env.PORT || 5000;

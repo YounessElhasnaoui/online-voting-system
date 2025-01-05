@@ -12,7 +12,8 @@ const registerUser = async (req, res) => {
   try {
     logger.info(`Registration attempt for email: ${email}`);
 
-    const emailExists = await User.findOne({ email });
+    const emailNormalized = email.toLowerCase();
+    const emailExists = await User.findOne({ email: emailNormalized });
     const usernameExists = await User.findOne({ username });
     if (emailExists) {
       return res.status(400).json({ message: 'Email is already registered' });
@@ -104,25 +105,7 @@ const loginUser = async (req, res) => {
 
   const getUserProfile = async (req, res) => {
     try {
-      const { limit = 10, page = 1 } = req.query;
-  
-      const user = await User.findById(req.user.id)
-        .populate({
-          path: 'pollsCreated',
-          select: 'question endTime',
-          options: {
-            limit: parseInt(limit),
-            skip: (parseInt(page) - 1) * parseInt(limit),
-          },
-        })
-        .populate({
-          path: 'pollsVoted',
-          select: 'pollId optionSelected votedAt',
-          options: {
-            limit: parseInt(limit),
-            skip: (parseInt(page) - 1) * parseInt(limit),
-          },
-        });
+      const user = await User.findById(req.user.id);
   
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
@@ -137,8 +120,6 @@ const loginUser = async (req, res) => {
             email: user.email,
             createdAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
-            pollsCreated: user.pollsCreated,
-            pollsVoted: user.pollsVoted,
           },
         },
         message: 'User profile fetched successfully',

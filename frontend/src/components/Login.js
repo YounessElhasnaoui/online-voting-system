@@ -176,7 +176,7 @@ const Login = () => {
       >
         <span>You're not a member yet?</span>
         <a
-          href="#"
+          href="/Register"
           style={{
             color: "#3498db",
             textDecoration: "none",

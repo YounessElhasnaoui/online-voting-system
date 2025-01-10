@@ -205,7 +205,7 @@ const updatePoll = async (req, res) => {
     }
 
     // Check if the user is the creator of the poll
-    if (poll.creator.toString() !== req.user.id) {
+    if (poll.creator._id.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'You are not authorized to update this poll' });
     }
 

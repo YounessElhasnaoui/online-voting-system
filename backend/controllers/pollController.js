@@ -2,6 +2,7 @@ const Poll = require('../models/Poll');
 const User = require('../models/User');
 const Vote = require('../models/Vote');
 const logger = require('../utils/logger');
+const { computeOptionsVoteCount } = require('../utils/voteCountHelper');
 
 // Create Poll
 const createPoll = async (req, res) => {
@@ -32,7 +33,7 @@ const createPoll = async (req, res) => {
 
 
   try {
-    const poll = await Poll.create({
+    let poll = await Poll.create({
       question,
       options: options.map((opt) => ({ text: opt })),
       allowedSelections,
@@ -40,6 +41,18 @@ const createPoll = async (req, res) => {
       creator: req.user.id,
       endTime,
     });
+
+    // Populate creator (to get username)
+    poll = await poll.populate('creator', 'username');
+
+    // Convert poll to object to modify data
+    poll = poll.toObject();
+
+    // Compute vote counts (initially all zero)
+    poll.options = await computeOptionsVoteCount(poll.options, poll._id);
+
+    // Attach creator username
+    poll.creatorUsername = poll.creator.username;
 
     res.status(201).json({
       success: true,
@@ -59,11 +72,21 @@ const getPolls = async (req, res) => {
     const polls = await Poll.find()
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .populate('creator', 'username');
+
+    // Convert each poll, compute vote counts, and attach creatorUsername
+    const pollsWithCounts = [];
+    for (const poll of polls) {
+      const pollObj = poll.toObject();
+      pollObj.options = await computeOptionsVoteCount(pollObj.options, pollObj._id);
+      pollObj.creatorUsername = pollObj.creator.username;
+      pollsWithCounts.push(pollObj);
+    }
 
     res.status(200).json({
       success: true,
-      data: polls,
+      data: pollsWithCounts,
       message: 'Polls fetched successfully',
     });
   } catch (error) {
@@ -76,41 +99,22 @@ const getPollDetails = async (req, res) => {
   const { pollId } = req.params;
 
   try {
-    const poll = await Poll.findById(pollId);
+    let poll = await Poll.findById(pollId).populate('creator', 'username');
 
     if (!poll) {
       return res.status(404).json({ success: false, message: 'Poll not found' });
     }
 
-    // Aggregate vote counts for each option
-    const voteCounts = await Vote.aggregate([
-      { $match: { poll: poll._id } }, // Match votes for the given poll
-      { $unwind: '$optionsSelected' }, // Unwind selected options
-      {
-        $group: {
-          _id: '$optionsSelected', // Group by selected option text
-          count: { $sum: 1 }, // Count occurrences
-        },
-      },
-    ]);
+    // Convert to object
+    poll = poll.toObject();
 
-    // Map vote counts to poll options
-    const optionsWithVotes = poll.options.map((option) => {
-      const vote = voteCounts.find((v) => v._id === option.text);
-      return {
-        text: option.text,
-        votes: vote ? vote.count : 0,
-      };
-    });
+    // Compute vote counts
+    poll.options = await computeOptionsVoteCount(poll.options, poll._id);
+    poll.creatorUsername = poll.creator.username;
 
     res.status(200).json({
       success: true,
-      data: {
-        poll: {
-          ...poll.toObject(),
-          options: optionsWithVotes, // Include updated options with vote counts
-        },
-      },
+      data: poll,
       message: 'Poll details fetched successfully',
     });
   } catch (error) {
@@ -119,7 +123,6 @@ const getPollDetails = async (req, res) => {
   }
 };
 
-// Get Polls by User
 // Get Polls by User
 const getPollsByUser = async (req, res) => {
   console.log(req.user.id);
@@ -156,14 +159,24 @@ const getPollsByUser = async (req, res) => {
     }
 
     // Fetch polls based on filter
-    const polls = await Poll.find(filter)
+    let polls = await Poll.find(filter)
       .sort({ createdAt: -1 })
       .limit(parsedLimit)
-      .skip((parsedPage - 1) * parsedLimit);
+      .skip((parsedPage - 1) * parsedLimit)
+      .populate('creator', 'username');
+    
+    // Convert and attach counts
+    const pollsWithCounts = [];
+    for (const poll of polls) {
+      const pollObj = poll.toObject();
+      pollObj.options = await computeOptionsVoteCount(pollObj.options, pollObj._id);
+      pollObj.creatorUsername = pollObj.creator.username;
+      pollsWithCounts.push(pollObj);
+    }
 
     res.status(200).json({
       success: true,
-      data: polls,
+      data: pollsWithCounts,
       message,
     });
   } catch (error) {
@@ -178,7 +191,7 @@ const updatePoll = async (req, res) => {
   const { question, options, allowedSelections, selectionType, endTime } = req.body;
 
   try {
-    const poll = await Poll.findById(id);
+    let poll = await Poll.findById(id).populate('creator', 'username');
 
     if (!poll) {
       return res.status(404).json({ success: false, message: 'Poll not found' });
@@ -208,8 +221,13 @@ const updatePoll = async (req, res) => {
     if (selectionType) poll.selectionType = selectionType;
     if (endTime) poll.endTime = endTime;
 
-    poll.updatedAt = new Date();
     await poll.save();
+     // Convert to object
+     poll = poll.toObject();
+
+     // Compute new vote counts
+     poll.options = await computeOptionsVoteCount(poll.options, poll._id);
+     poll.creatorUsername = poll.creator.username;
 
     res.status(200).json({
       success: true,

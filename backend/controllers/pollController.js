@@ -66,21 +66,47 @@ const createPoll = async (req, res) => {
 };
 
 const getPolls = async (req, res) => {
-  const { limit = 10, page = 1 } = req.query;
+  const { limit = 10, page = 1, q } = req.query;
 
   try {
-    const polls = await Poll.find()
+    const parsedLimit = parseInt(limit, 10);
+    const parsedPage = parseInt(page, 10);
+
+    if (isNaN(parsedLimit) || parsedLimit <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid limit parameter',
+      });
+    }
+
+    if (isNaN(parsedPage) || parsedPage <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid page parameter',
+      });
+    }
+
+    let filter = {};
+    if (q && typeof q === 'string') {
+      filter = {
+        $or: [
+          { question: { $regex: q, $options: 'i' } },
+          { 'options.text': { $regex: q, $options: 'i' } },
+        ],
+      };
+    }
+
+    const polls = await Poll.find(filter)
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parsedLimit)
+      .skip((parsedPage - 1) * parsedLimit)
       .populate('creator', 'username');
 
-    // Convert each poll, compute vote counts, and attach creatorUsername
     const pollsWithCounts = [];
-    for (const poll of polls) {
-      const pollObj = poll.toObject();
+    for (const pollDoc of polls) {
+      const pollObj = pollDoc.toObject();
       pollObj.options = await computeOptionsVoteCount(pollObj.options, pollObj._id);
-      pollObj.creatorUsername = pollObj.creator.username;
+      pollObj.creatorUsername = pollObj.creator?.username || 'Unknown';
       pollsWithCounts.push(pollObj);
     }
 
